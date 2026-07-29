@@ -19,6 +19,9 @@ st.set_page_config(
 # ---------------- HELPER FUNCTIONS ----------------
 
 def clean_card_lines(raw_lines):
+    """
+    Strips out site interface text such as 'AÑADIR AL CARRITO' and 'MERCADO'.
+    """
     ignored_keywords = [
         "añadir al carrito", "mercado", "añadir", 
         "cart", "add to cart", "comprar"
@@ -32,17 +35,23 @@ def clean_card_lines(raw_lines):
     return cleaned
 
 def parse_price(price_str):
+    """
+    Extracts numerical float price from text like '$24.99' -> 24.99
+    """
     match = re.search(r'\$?(\d+(?:\.\d{1,2})?)', price_str)
     if match:
         return float(match.group(1))
     return 999999.0
 
 def process_card_search(page, target_card):
+    """
+    Queries the Geekorium store, waits for DOM elements, and extracts matching cards.
+    """
     encoded = urllib.parse.quote(target_card)
     search_url = f"{BASE_URL}/?q={encoded}"
     
-    page.goto(search_url)
-    page.wait_for_timeout(2000)
+    page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
+    page.wait_for_timeout(2000)  # Wait for JS dynamic grid rendering
     
     cards_raw = page.evaluate('''() => {
         const items = [];
@@ -79,6 +88,7 @@ def process_card_search(page, target_card):
         set_code = "N/A"
         
         for line in cleaned:
+            # Enforce exact match on card title (case-insensitive)
             if line.strip().lower() == target_card.strip().lower():
                 exact_found = True
             if '$' in line:
@@ -97,11 +107,14 @@ def process_card_search(page, target_card):
                 "Details": " | ".join(cleaned)
             })
 
-    # Sort results by price ascending
+    # Sort matches by price ascending (cheapest first)
     valid_entries.sort(key=lambda x: x["Price ($)"])
     return valid_entries
 
 def run_playwright_search(cards, headless=True):
+    """
+    Launches headless Chromium with low-memory arguments and executes the search loop.
+    """
     # Auto-install Playwright browser binaries if missing on Streamlit Cloud
     try:
         subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
@@ -113,20 +126,38 @@ def run_playwright_search(cards, headless=True):
     found_count = 0
 
     with sync_playwright() as p:
-        # Launch Chromium with extra flags for Linux cloud hosting
+        # Low-RAM launch args designed for Streamlit Cloud (1GB RAM limit)
         browser = p.chromium.launch(
             headless=headless,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--single-process"
+            ]
         )
+        
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         page = context.new_page()
 
         for idx, card in enumerate(cards):
-            matches = process_card_search(page, card)
-            results_by_card[card] = matches
-            if matches:
-                found_count += 1
-                grand_total += matches[0]["Price ($)"]
+            try:
+                matches = process_card_search(page, card)
+                results_by_card[card] = matches
+                if matches:
+                    found_count += 1
+                    grand_total += matches[0]["Price ($)"]  # Add cheapest option
+            except Exception as err:
+                print(f"Error processing '{card}': {err}")
+                # Recover context/page if tab crashed mid-loop
+                try:
+                    page = context.new_page()
+                except Exception:
+                    context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    page = context.new_page()
+                results_by_card[card] = []
 
         browser.close()
 
@@ -144,7 +175,7 @@ with st.sidebar:
     headless_mode = st.checkbox("Run Browser Headless", value=True)
     st.info("Tip: Headless mode runs faster in cloud server environments.")
 
-# Card input text box
+# Input Box
 default_list = "Sol Ring\nAnger\nLightning Bolt"
 user_input = st.text_area("Input Card List:", value=default_list, height=180)
 
@@ -159,7 +190,7 @@ if st.button("🚀 Check Availability", type="primary"):
         with st.spinner("Processing cards on Geekorium..."):
             results_by_card, grand_total, found_count = run_playwright_search(cards, headless=headless_mode)
 
-        # Display Summary Metrics
+        # Summary Metrics
         col1, col2, col3 = st.columns(3)
         col1.metric("Total Cards Searched", len(cards))
         col2.metric("Cards In-Stock", f"{found_count} / {len(cards)}")
@@ -167,7 +198,7 @@ if st.button("🚀 Check Availability", type="primary"):
 
         st.divider()
 
-        # Display Detailed Breakdown
+        # Detailed Card Breakdown
         for card in cards:
             st.subheader(f"🃏 {card}")
             matches = results_by_card.get(card, [])
