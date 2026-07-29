@@ -27,6 +27,19 @@ st.set_page_config(
 
 # ---------------- HELPER FUNCTIONS ----------------
 
+def extract_card_name(raw_name):
+    """
+    Cleans MTG export formats like '1 Zada, Hedron Grinder (J25) 76'
+    Returns just the card name: 'Zada, Hedron Grinder'
+    """
+    # 1. Remove leading quantity (e.g., "1 ", "4x ")
+    cleaned = re.sub(r'^\d+x?\s+', '', raw_name)
+    
+    # 2. Remove the set code and everything after it (e.g., "(J25) 76")
+    cleaned = re.sub(r'\s*\(.*', '', cleaned)
+    
+    return cleaned.strip()
+    
 def clean_card_lines(raw_lines):
     ignored_keywords = [
         "añadir al carrito", "mercado", "añadir",
@@ -129,8 +142,9 @@ default_list = "Sol Ring\nAnger\nLightning Bolt"
 user_input = st.text_area("Input Card List:", value=default_list, height=180)
 
 if st.button("🚀 Check Availability", type="primary"):
-    # Parse card names from input
-    cards = [c.strip() for c in user_input.split('\n') if c.strip()]
+    # Parse and clean card names from input
+    raw_lines = [c.strip() for c in user_input.split('\n') if c.strip()]
+    cards = [extract_card_name(line) for line in raw_lines]
 
     if not cards:
         st.warning("Please enter at least one card name.")
