@@ -193,7 +193,15 @@ if st.button("🚀 Check Availability", type="primary"):
 
         # Display Detailed Breakdown
         for card in cards:
-            st.subheader(f"🃏 {card}")
+            # 1. URL-encode the card name to handle spaces and special characters
+            encoded_name = urllib.parse.quote(card)
+            
+            # 2. Construct the direct link to the Geekorium search page
+            search_url = f"{BASE_URL}/?q={encoded_name}"
+            
+            # 3. Use st.markdown to create a clickable level-3 heading (### is equivalent to a subheader)
+            st.markdown(f"### [🃏 {card}]({search_url})")
+            
             matches = results_by_card.get(card, [])
 
             if matches:
