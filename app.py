@@ -3,6 +3,15 @@ import time
 import re
 import urllib.parse
 from playwright.sync_api import sync_playwright
+import os
+
+# --- NEW: Playwright Installation Setup ---
+@st.cache_resource
+def install_playwright():
+    os.system("playwright install chromium")
+
+install_playwright()
+# ----------------------------------------
 
 BASE_URL = "https://www.geekorium.shop"
 
@@ -12,6 +21,8 @@ st.set_page_config(
     page_icon="🃏",
     layout="wide"
 )
+
+# ... [The rest of your script remains exactly the same] ...
 
 
 # ---------------- HELPER FUNCTIONS ----------------
