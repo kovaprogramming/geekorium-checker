@@ -113,7 +113,7 @@ def process_card_search(page, target_card):
 
 def run_playwright_search(cards, headless=True):
     """
-    Launches headless Chromium with low-memory arguments and executes the search loop.
+    Launches headless Chromium with clean, stable Linux server flags.
     """
     # Auto-install Playwright browser binaries if missing on Streamlit Cloud
     try:
@@ -126,16 +126,14 @@ def run_playwright_search(cards, headless=True):
     found_count = 0
 
     with sync_playwright() as p:
-        # Low-RAM launch args designed for Streamlit Cloud (1GB RAM limit)
+        # Stable launch flags for Streamlit Cloud / Linux
         browser = p.chromium.launch(
             headless=headless,
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--no-zygote",
-                "--single-process"
+                "--disable-gpu"
             ]
         )
         
@@ -148,10 +146,10 @@ def run_playwright_search(cards, headless=True):
                 results_by_card[card] = matches
                 if matches:
                     found_count += 1
-                    grand_total += matches[0]["Price ($)"]  # Add cheapest option
+                    grand_total += matches[0]["Price ($)"]
             except Exception as err:
                 print(f"Error processing '{card}': {err}")
-                # Recover context/page if tab crashed mid-loop
+                # Recover context if tab encounters an issue
                 try:
                     page = context.new_page()
                 except Exception:
